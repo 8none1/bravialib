@@ -347,6 +347,8 @@ class Bravia(object):
         r = self.do_POST(url="/sony/avContent", payload=payload, headers=headers)
         chan_count = int(r.json()['result'][0]['count'])
         # It seems to only return the channels in lumps of 50, and some of those returned are blank?
+        # Problem:  It says there are like 800 channels, but some of those are "bad" and overwrite the "good" ones.  Need to be more picky
+        # about which ones to add to the list.
         loops = int(chan_count / 50) + (chan_count % 50 > 0)
         chunk = 0
         for x in range(loops):
