@@ -239,7 +239,6 @@ class Bravia(object):
         payload = self._build_json_payload("setPlayContent", [{"uri":uri}])
         headers = self._JSON_HEADER
         r = self.do_POST(url="/sony/avContent", payload=payload, headers=headers, cookies=self.cookies)
-        self._debug_request(r)        
         if r.status_code == 200:
             if "error" in r.json().keys():
                 # Something didnt work.  The JSON will tell you what.
@@ -353,7 +352,6 @@ class Bravia(object):
         for x in range(loops):
             payload = self._build_json_payload("getContentList", [{"stIdx":chunk, "source":"tv:dvbt", "cnt":50, "target":"all" }], version="1.2")
             r = self.do_POST(url="/sony/avContent", payload=payload, headers=headers)
-            self._debug_request(r)
             a = r.json()['result'][0]
             for each in a:
                 self.dvbt_channels[each['title']] = {'chan_num':each['dispNum'], 'uri':each['uri']}

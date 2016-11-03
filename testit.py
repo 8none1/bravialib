@@ -21,7 +21,7 @@ if b is True:
   #print tv.get_input_uri_from_label('MythTV')
   tv.set_external_input(tv.get_input_uri_from_label('Chromecast')) # You need to have labled your inputs for this to work
   #tv.get_channel_list()
-  #chan  = tv.get_channel_uri('Channel 4')
+  chan  = tv.get_channel_uri('BBC ONE HD')
   print chan
   tv.set_external_input(chan)
   print tv.dvbt_channels.keys()
@@ -32,7 +32,7 @@ if b is True:
 
 
 elif b is False:
-  if type(a) is NoneType:
+  if type(a) is None:
     print "I couldn't connect to the tv at all"
     sys.exit()
   elif type(a) is not None:
