@@ -31,11 +31,10 @@ import socket
 import struct
 
 
-
 class Bravia(object):
-    def __init__(self, ip_addr):
+    def __init__(self, ip_addr, mac_addr = None):
         self.ip_addr = ip_addr
-        self.mac_addr = None # You don't *have* to specify the MAC address as once we are paired via IP we can find 
+        self.mac_addr = mac_addr # You don't *have* to specify the MAC address as once we are paired via IP we can find 
         # it from the TV but it will only be stored for this session.  If the TV is off and you are running this script
         # from cold - you will need the MAC to wake the TV up.
         self.device_id = "WebInterface:001"
@@ -54,50 +53,100 @@ class Bravia(object):
 
     def _debug_request(self, r):
         # Pass a Requests response in here to see what happened
-        print "\n\n------What came back ----------"
-        print r.status_code
-        print r.headers
-        print r.text
+        print "\n\n\n"
         print "------- What was sent out ---------"
         print r.request.headers
         print r.request.body
-        print "------------X------------------"
-        print "\n\n\n\n\n"        
+        print "---------What came back -----------"
+        print r.status_code
+        print r.headers
+        print r.text
+        print "-----------------------------------"
+        print "\n\n\n"        
         
         
     def _build_json_payload(self,method, params = [], version="1.0"):
-        return {"id":self.packet_id, "method":method, "params":params, "version":version}
+        return {"id":self.packet_id, "method":method, "params":params,
+                "version":version}
             
+    def is_available(self):
+        # Try to find out if the TV is actually on or not.  Pinging the TV would require
+        # this script to run as root, so not doing that.  This function return True or
+        # False depending on if the box is on or not.
+        payload = self._build_json_payload("getPowerStatus")
+        try:
+            # Using a shorter timeout here so we can return more quickly
+            r = self.do_POST(url="/sony/system", payload = payload, timeout=2)
+            self._debug_request(r)
+            data = r.json()
+            if data.has_key('result'):
+                if data['result'][0]['status'] == "standby":
+                    # TV is in standby mode, and so not on.
+                    return False
+                elif data['result'][0]['status'] == "active":
+                    # TV really is on
+                    return True
+                else:
+                    # Assume it's not on.
+                    print "Uncaught result"
+                    return False
+            if data.has_key('error'):
+                if 404 in data['error']:
+                    # TV is probably booting at this point - so not available yet
+                    return False
+                elif 403 in data['error']:
+                    # A 403 Forbidden is acceptable here, because it means the TV is responding to requests
+                    return True
+                else:
+                    print "Uncaught error"
+                    return False
+            return True
+        except requests.exceptions.ConnectTimeout:
+            print "No response, TV is probably off"
+            return False
+        except requests.exceptions.ConnectionError:
+            print "TV is certainly off."
+            return False
+        except requests.exceptions.ReadTimeout:
+            print "TV is on but not accepting commands yet"
+            return False
+        except ValueError:
+            print "Didn't get back JSON as expected"
+            # This might lead to false negatives - need to check
+            return False
+        
 
-    def do_GET(self, url=None, headers=None, auth=None, cookies=None):
+
+    def do_GET(self, url=None, headers=None, auth=None, cookies=None, timeout=None):
         if url is None: return False
         if url[0:4] != "http": url=self.endpoint+url
         if cookies is None and self.cookies is not None: cookies=self.cookies
+        if timeout is None: timeout = self._TIMEOUT
         if headers is None:
-            r = requests.get(url, cookies=cookies, auth=auth, timeout=self._TIMEOUT)
+            r = requests.get(url, cookies=cookies, auth=auth, timeout=timeout)
         else:
-            r = requests.get(url, headers=headers, cookies=cookies, auth=auth, timeout=self._TIMEOUT)
+            r = requests.get(url, headers=headers, cookies=cookies, auth=auth, timeout=timeout)
         return r
 
-    def do_POST(self, url=None, payload=None, headers=None, auth=None, cookies=None):
+    def do_POST(self, url=None, payload=None, headers=None, auth=None, cookies=None, timeout=None):
         if url is None: return False
         if type(payload) is dict: payload = json.dumps(payload)
+        if headers is None: headers = self._JSON_HEADER # If you don't want any extra headers pass in ""
+        if cookies is None and self.cookies is not None: cookies=self.cookies
+        if timeout is None: timeout = self._TIMEOUT
         if url[0:4] != "http":  url = self.endpoint+url # if you want to pass just the path you can, otherwise pass a full url and it will be used
         self.packet_id += 1 # From packet captures, this increments on each request, so its a good idea to use this method all the time
-        if cookies is None and self.cookies is not None:  cookies = self.cookies # If you dont give me cookies and I have some, use them
-        if cookies is None and self.cookies is None:
-            # We haven't got any cookies yet, and so are not authenticated
-            # in which case this should be the only type of POST going on now
-            # One with the BasicAuth details in order to get a cookie
-            r = requests.post(url=url, data=payload, headers=headers, auth=auth, timeout=self._TIMEOUT)
-            return r
-        else:
-            if headers == None:  # I wonder if I pass "headers=None" to requests it will break?  Do this until I test.
-                r = requests.post(url, data=payload, cookies=cookies, timeout=self._TIMEOUT)
-                return r
-            else:
-                r = requests.post(url, data=payload, headers=headers, cookies=cookies, timeout=self._TIMEOUT)
-                return r
+        #if cookies is None and self.cookies is not None:  cookies = self.cookies # If you dont give me cookies and I have some, use them
+        #if headers is None: headers = self._JSON_HEADER
+        #if cookies is None:
+        #    # We haven't got any cookies yet, and so are not authenticated
+        #    # in which case this should be the only type of POST going on now
+        #    # One with the BasicAuth details in order to get a cookie
+        #    r = requests.post(url=url, data=payload, headers=headers, auth=auth, timeout=timeout)
+        #    return r
+        #else:
+        r = requests.post(url, data=payload, headers=headers, cookies=cookies, timeout=timeout)
+        return r
 
     def connect(self):
         # TODO: What if the TV is off and we can't connect?
@@ -114,23 +163,23 @@ class Bravia(object):
         #  5. Use the cookie in all subsequent requests.  Note there is an issue with this.  The cookie is for
         #     path "/sony/" *but* the Apps are run from a path "/DIAL/sony/" so I try and fix this by adding a
         #     second cookie with that path and the same auth data.
-        #payload = { "id" : self.packet_id,
-        #            "method" : "actRegister",
-        #            "params" : [ {"clientid" : self.device_id,
-        #                          "nickname" : self.nickname},
-        #                          [ {"value" : "no",
-        #                             "function" : "WOL"},
-        #                            {"value" : "no",
-        #                             "function" : "pinRegistration"} ]
-        #                       ],
-        #            "version" : "1.0"}
-        payload = self._build_json_payload("actRegister", [{"clientid":self.device_id,"nickname":self.nickname},[{"value":"no","function":"WOL"},{"value":"no","function":"pinRegistration"}]])
-        headers = self._JSON_HEADER
-        r = self.do_POST(url='/sony/accessControl', payload=payload, headers=headers)
+        payload = self._build_json_payload("actRegister",
+            [{"clientid":self.device_id,"nickname":self.nickname},
+            [{"value":"no","function":"WOL"},
+            {"value":"no","function":"pinRegistration"}]])
+        try:
+            r = self.do_POST(url='/sony/accessControl', payload=payload)
+        except requests.exceptions.ConnectTimeout:
+            print "No response, TV is probably off"
+            return None, False
+        except requests.exceptions.ConnectionError:
+            print "TV is certainly off."
+            return None, False
+
         if r.status_code == 200:
             # Rather handily, the TV returns a 200 if the TV is in stand-by but not really on :)
             try:
-                if "error" in r.json().keys():
+                if "error" in r.json(): #.keys():
                     if "not power-on" in r.json()['error']:
                         # TV isn't powered up
                         r = self.wakeonlan()
@@ -144,12 +193,14 @@ class Bravia(object):
             # Also add the /DIAL/ path cookie
             # Looks like requests doesn't handle two cookies with the same name ('auth') in one jar
             # so going to have a dict for the DIAL cookie and pass around as needed. :/
-            a = r.headers['Set-Cookie'].split(';') # clone the cookie from the response headers
+            a = r.headers['Set-Cookie'].split(';') # copy the cookie data headers
             for each in a:
               if len(each) > 0:
                 b = each.split('=')
                 self.DIAL_cookie[b[0].strip()] = b[1]
-            # Populate some data now automatically.  I don't do everything here, but if you try a method which has a pre-requisite then it /should/ handle it automatically
+            # Populate some data now automatically.
+            # I don't do everything here, but if you try a method which has a 
+            # pre-requisite then it /should/ handle it automatically
             self.get_system_info()
             self.populate_controller_lookup()
             return r,True
@@ -170,9 +221,11 @@ class Bravia(object):
         #                          [{"value":"no","function":"WOL"}]
         #                       ],
         #            "version" : "1.0"}
-        payload = self._build_json_payload("actRegister", [{"clientid":self.device_id,"nickname":self.nickname},[{"value":"no","function":"WOL"}]])
-        headers = self._JSON_HEADER
-        r = self.do_POST(url='/sony/accessControl', payload=payload, headers=headers)
+        payload = self._build_json_payload("actRegister", 
+            [{"clientid":self.device_id,"nickname":self.nickname},
+            [{"value":"no","function":"WOL"}]])
+        #headers = self._JSON_HEADER
+        r = self.do_POST(url='/sony/accessControl', payload=payload)
         if r.status_code == 200:
             return r,True
         if r.status_code == 401:
@@ -191,14 +244,13 @@ class Bravia(object):
         #                       ],
         #            "version" : "1.0"
         #          }
-        payload = self._build_json_payload("actRegister", [{"clientid":self.device_id, "nickname":self.nickname},[{"value":"no", "function":"WOL"}]])
-        auth = HTTPBasicAuth('',pin)
-        headers = self._JSON_HEADER
-        r = self.do_POST(url='/sony/accessControl', payload=payload, headers=headers, auth=auth)
+        payload = self._build_json_payload("actRegister", 
+            [{"clientid":self.device_id, "nickname":self.nickname},
+            [{"value":"no", "function":"WOL"}]])
+        self.auth = HTTPBasicAuth('',pin) # Going to keep this in the object, just in case we need it again later
+        r = self.do_POST(url='/sony/accessControl', payload=payload, auth=self.auth)
         if r.status_code == 200:
             print("have paired")
-            print(r.status_code)
-            print(r.text)
             # let's call connect again to get the cookies all set up properly
             a,b = self.connect()
             if b is True:
@@ -210,8 +262,7 @@ class Bravia(object):
 
     def get_system_info(self):
         payload = self._build_json_payload("getSystemInformation")
-        headers = self._JSON_HEADER
-        r = self.do_POST(url="/sony/system", payload=payload, headers=headers, cookies=self.cookies)
+        r = self.do_POST(url="/sony/system", payload=payload)
         if r.status_code == 200:
             self.system_info = r.json()['result'][0]
             if self.mac_addr == None: self.mac_addr = self.system_info['macAddr']
@@ -221,8 +272,7 @@ class Bravia(object):
             
     def get_input_map(self):
         payload = self._build_json_payload("getCurrentExternalInputsStatus")
-        headers = self._JSON_HEADER
-        r = self.do_POST(url="/sony/avContent", payload=payload, headers=headers, cookies=self.cookies)
+        r = self.do_POST(url="/sony/avContent", payload=payload)
         if r.status_code == 200:
             for each in r.json()['result'][0]:
                 self.input_map[each['title']] = {'label':each['label'], 'uri':each['uri']}
@@ -231,16 +281,15 @@ class Bravia(object):
             return False
             
     def get_input_uri_from_label(self, label):
-        for each in self.input_map.keys():
+        for each in self.input_map:
             if self.input_map[each]['label'] == label:
                 return self.input_map[each]['uri']
 
     def set_external_input(self, uri):
         payload = self._build_json_payload("setPlayContent", [{"uri":uri}])
-        headers = self._JSON_HEADER
-        r = self.do_POST(url="/sony/avContent", payload=payload, headers=headers, cookies=self.cookies)
+        r = self.do_POST(url="/sony/avContent", payload=payload)
         if r.status_code == 200:
-            if "error" in r.json().keys():
+            if "error" in r.json(): #.keys():
                 # Something didnt work.  The JSON will tell you what.
                 return False
             else:
@@ -267,8 +316,7 @@ class Bravia(object):
 
     def populate_controller_lookup(self):
         payload = self._build_json_payload("getRemoteControllerInfo")
-        headers = self._JSON_HEADER
-        r = self.do_POST(url='/sony/system', payload=payload, headers=headers, cookies=self.cookies)
+        r = self.do_POST(url='/sony/system', payload=payload)
         if r.status_code == 200:
             for each in r.json()['result'][1]:
                 self.remote_controller_code_lookup[each['name'].lower()] = each['value']
@@ -282,12 +330,12 @@ class Bravia(object):
         # You can probably guess what these would be, but if not:
         # print <self>.remote_controller_code_lookup
         action = action.lower()
-        if action in self.remote_controller_code_lookup.keys():
+        if action in self.remote_controller_code_lookup: #.keys():
             ircc_code = self.remote_controller_code_lookup[action]
         else: return False
         header = {'SOAPACTION': '"urn:schemas-sony-com:service:IRCC:1#X_SendIRCC"'}
         url = "/sony/IRCC"
-        body = '<?xml version="1.0"?>' # Just wow...
+        body = '<?xml version="1.0"?>' # Look at all this crap just to send a remote control code...
         body +=   '<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">'
         body +=     '<s:Body>'
         body +=        '<u:X_SendIRCC xmlns:u="urn:schemas-sony-com:service:IRCC:1">'
@@ -295,16 +343,17 @@ class Bravia(object):
         body +=        '</u:X_SendIRCC>'
         body +=     '</s:Body>'
         body +=   '</s:Envelope>'
-        r = self.do_POST(url=url, payload=body, headers=header, cookies=self.cookies)
+        r = self.do_POST(url=url, payload=body, headers=header)
+        print self._debug_request(r)
         if r.status_code == 200:
             return True
         else:
             return False
    
     def populate_apps_lookup(self):
-        # Interesting note:  If you don't do this (presumably just calling the URL is enough) then apps won't
-        # actually launch and you will get a 404 error back from the TV.  Once you've called this it starts
-        # working.
+        # Interesting note:  If you don't do this (presumably just calling the
+        # URL is enough) then apps won't actually launch and you will get a 404
+        # error back from the TV.  Once you've called this it starts working.
         self.app_lookup={}
         r = self.do_GET(url="/DIAL/sony/applist", cookies=self.DIAL_cookie)
         if r.status_code == 200:
@@ -315,7 +364,6 @@ class Bravia(object):
                 try: iconurl = each.getElementsByTagName('icon_url')[0].firstChild.data
                 except: iconurl = None
                 self.app_lookup[appname] = {'id':appid, 'iconurl':iconurl}
-                #print appid, appname
             return True
         else:
             return False
@@ -327,7 +375,8 @@ class Bravia(object):
         app_id = self.app_lookup[app_name]['id']
         print "Trying to load app:", app_id
         headers = {'Connection':'close'}
-        r = self.do_POST(url="/DIAL/apps/"+app_id, headers=headers, cookies=self.DIAL_cookie)
+        r = self.do_POST(url="/DIAL/apps/"+app_id, headers=headers,
+            cookies=self.DIAL_cookie)
         if r.status_code == 201:
             return True
         else:
@@ -335,34 +384,60 @@ class Bravia(object):
             
     def get_app_status(self):
         payload = self._build_json_payload("getApplicationStatusList")
-        headers = self._JSON_HEADER
-        r = self.do_POST(url="/sony/appControl", payload=payload, headers=headers, cookies=self.cookies)
-        return r.text
+        r = self.do_POST(url="/sony/appControl", payload=payload)
+        return r.json()
 
     def get_channel_list(self):
         # This only supports dvbt for now...
         # First, we find out how many channels there are
-        payload = self._build_json_payload("getContentCount", [{"target":"all", "source":"tv:dvbt"}], version="1.1")
-        headers = self._JSON_HEADER
-        r = self.do_POST(url="/sony/avContent", payload=payload, headers=headers)
+        payload = self._build_json_payload("getContentCount", 
+            [{"target":"all", "source":"tv:dvbt"}], version="1.1")
+        r = self.do_POST(url="/sony/avContent", payload=payload)
         chan_count = int(r.json()['result'][0]['count'])
         # It seems to only return the channels in lumps of 50, and some of those returned are blank?
         # Problem:  It says there are like 800 channels, but some of those are "bad" and overwrite the "good" ones.  Need to be more picky
         # about which ones to add to the list.
-        loops = int(chan_count / 50) + (chan_count % 50 > 0)
+        chunk_size = 50
+        loops = int(chan_count / chunk_size) + (chan_count % chunk_size > 0) # Sneaky round up trick, the mod > 0 evaluates to int 1
         chunk = 0
         for x in range(loops):
-            payload = self._build_json_payload("getContentList", [{"stIdx":chunk, "source":"tv:dvbt", "cnt":50, "target":"all" }], version="1.2")
-            r = self.do_POST(url="/sony/avContent", payload=payload, headers=headers)
+            payload = self._build_json_payload("getContentList",
+                [{"stIdx":chunk, "source":"tv:dvbt", "cnt":chunk_size,
+                "target":"all" }], version="1.2")
+            r = self.do_POST(url="/sony/avContent", payload=payload)
             a = r.json()['result'][0]
             for each in a:
-                self.dvbt_channels[each['title']] = {'chan_num':each['dispNum'], 'uri':each['uri']}
-            chunk += 50
+                if each['title'] == "": continue # We get back some blank entries, so just ignore them
+                if self.dvbt_channels.has_key(each['title']):
+                    # Channel has already been added, we only want to keep the one with the lowest chan_num.
+                    # The TV seems to return channel data for channels it can't actually receive (e.g. out of
+                    # area local BBC channels). Trying to tune to these gives an error.
+                    if int(each['dispNum']) > int(self.dvbt_channels[each['title']]['chan_num']):
+                        # This is probably not a "real" channel we care about, so skip it.
+                        continue
+                        #self.dvbt_channels[each['title']] = {'chan_num':each['dispNum'], 'uri':each['uri']}
+                else:
+                    self.dvbt_channels[each['title']] = {'chan_num':each['dispNum'], 'uri':each['uri']}
+            chunk += chunk_size
+            
+    def create_HD_chan_lookups(self):
+        # This should probably be in the script that imports this library not in
+        # the library itself, but I wanted this feature, so I'm chucking it in
+        # here.  This probably only works for Freeview in the UK.
+        # Use case to demonstrate why this is here:  You want to use Alexa to
+        # switch the channel.  Naturally, you want the HD channel if there is 
+        # one but you don't want to have to say "BBC ONE HD" because that would
+        # be stupid.  So you just say "BBC ONE" and the script does the work to
+        # find the HD version for you.
+        for each in self.dvbt_channels.iteritems():
+            hd_version = "%s HD" % each[0] # e.g. "BBC ONE" : "BBC ONE HD"
+            if hd_version in self.dvbt_channels:
+                # Extend the schema by adding a "hd_uri" key
+                self.dvbt_channels[each[0]]['hd_uri'] = self.dvbt_channels[hd_version]['uri']
         
     def get_channel_uri(self, title):
         if self.dvbt_channels == {}: self.get_channel_list()
-        chan = self.dvbt_channels[title]['uri']
-        return chan
+        return self.dvbt_channels[title]['uri']
 
     def wakeonlan(self):
         # Thanks: Taken from https://github.com/aparraga/braviarc/blob/master/braviarc/braviarc.py
@@ -385,4 +460,4 @@ class Bravia(object):
             return False
 
 
-        
+
