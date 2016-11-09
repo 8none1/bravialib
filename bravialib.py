@@ -21,7 +21,11 @@
 #   
 # Some useful resources:
 #   A tidied up packet capture I did from the iphone app:  http://paste.ubuntu.com/23417464/plain/
-
+#
+#
+# TODO:
+#       Move logging out of prints and in to logging
+#
 
 import requests
 from requests.auth import HTTPBasicAuth
@@ -29,6 +33,9 @@ import json
 from xml.dom import minidom
 import socket
 import struct
+import time
+
+
 
 
 class Bravia(object):
@@ -50,6 +57,7 @@ class Bravia(object):
         self.app_lookup = {}
         self.input_map = {}
         self.dvbt_channels = {}
+        self.paired = False
 
     def _debug_request(self, r):
         # Pass a Requests response in here to see what happened
@@ -77,7 +85,6 @@ class Bravia(object):
         try:
             # Using a shorter timeout here so we can return more quickly
             r = self.do_POST(url="/sony/system", payload = payload, timeout=2)
-            self._debug_request(r)
             data = r.json()
             if data.has_key('result'):
                 if data['result'][0]['status'] == "standby":
@@ -116,7 +123,6 @@ class Bravia(object):
             return False
         
 
-
     def do_GET(self, url=None, headers=None, auth=None, cookies=None, timeout=None):
         if url is None: return False
         if url[0:4] != "http": url=self.endpoint+url
@@ -136,16 +142,10 @@ class Bravia(object):
         if timeout is None: timeout = self._TIMEOUT
         if url[0:4] != "http":  url = self.endpoint+url # if you want to pass just the path you can, otherwise pass a full url and it will be used
         self.packet_id += 1 # From packet captures, this increments on each request, so its a good idea to use this method all the time
-        #if cookies is None and self.cookies is not None:  cookies = self.cookies # If you dont give me cookies and I have some, use them
-        #if headers is None: headers = self._JSON_HEADER
-        #if cookies is None:
-        #    # We haven't got any cookies yet, and so are not authenticated
-        #    # in which case this should be the only type of POST going on now
-        #    # One with the BasicAuth details in order to get a cookie
-        #    r = requests.post(url=url, data=payload, headers=headers, auth=auth, timeout=timeout)
-        #    return r
-        #else:
-        r = requests.post(url, data=payload, headers=headers, cookies=cookies, timeout=timeout)
+        if auth is not None:
+            r = requests.post(url, data=payload, headers=headers, cookies=cookies, auth=self.auth, timeout=timeout)
+        else:
+            r = requests.post(url, data=payload, headers=headers, cookies=cookies, timeout=timeout)
         return r
 
     def connect(self):
@@ -168,7 +168,7 @@ class Bravia(object):
             [{"value":"no","function":"WOL"},
             {"value":"no","function":"pinRegistration"}]])
         try:
-            r = self.do_POST(url='/sony/accessControl', payload=payload)
+            r = self.do_POST(url='/sony/accessControl', payload=payload)            
         except requests.exceptions.ConnectTimeout:
             print "No response, TV is probably off"
             return None, False
@@ -183,12 +183,14 @@ class Bravia(object):
                     if "not power-on" in r.json()['error']:
                         # TV isn't powered up
                         r = self.wakeonlan()
-                        print "TV not on!. Have sent wakeonlan, probably try again in a mo."
+                        print "TV not on! Have sent wakeonlan, probably try again in a mo."
                         # TODO: make this less crap
+                        return None,False
             except:
                 raise
             
             # If we get here then We are already paired so get the new token
+            self.paired = True
             self.cookies = r.cookies
             # Also add the /DIAL/ path cookie
             # Looks like requests doesn't handle two cookies with the same name ('auth') in one jar
@@ -199,12 +201,24 @@ class Bravia(object):
                 b = each.split('=')
                 self.DIAL_cookie[b[0].strip()] = b[1]
             # Populate some data now automatically.
-            # I don't do everything here, but if you try a method which has a 
-            # pre-requisite then it /should/ handle it automatically
+            print "Getting DMR info..."
+            self.get_dmr()
+            print "Getting sysem info..."
             self.get_system_info()
+            print "Populating remote control codes..."
             self.populate_controller_lookup()
+            print "Enumerating TV inputs..."
+            self.get_input_map()
+            print "Populating apps list..."
+            self.populate_apps_lookup()
+            print "Populating channel list..."
+            self.get_channel_list()
+            print "Matching HD channels..."
+            self.create_HD_chan_lookups() # You might not want to do this if you don't use Freeview in the UK
+            print "Done initialising TV data."
             return r,True
         elif r.status_code == 401:
+            print "We are not paired!"
             return r,False
         elif r.status_code == 404:
             # Most likely the TV hasn't booted yet
@@ -214,19 +228,12 @@ class Bravia(object):
             
     def start_pair(self):
         # This should prompt the TV to display the pairing screen
-        #payload = { "id" : self.packet_id,
-        #            "method" : "actRegister",
-        #            "params" : [ {"clientid":self.device_id,
-        #                          "nickname":self.nickname},
-        #                          [{"value":"no","function":"WOL"}]
-        #                       ],
-        #            "version" : "1.0"}
         payload = self._build_json_payload("actRegister", 
             [{"clientid":self.device_id,"nickname":self.nickname},
             [{"value":"no","function":"WOL"}]])
-        #headers = self._JSON_HEADER
         r = self.do_POST(url='/sony/accessControl', payload=payload)
         if r.status_code == 200:
+            print "Probably already paired"
             return r,True
         if r.status_code == 401:
             return r,False
@@ -235,15 +242,6 @@ class Bravia(object):
             
     def complete_pair(self, pin):
         # The user should have a PIN on the screen now, pass it in here to complete the pairing process
-        #payload = { "id" : self.packet_id,
-        #            "method" : "actRegister",
-        #            "params" : [ {"clientid" : self.device_id,
-        #                           "nickname" : self.nickname},
-        #                           [{"value" : "no",
-        #                             "function" : "WOL"}]
-        #                       ],
-        #            "version" : "1.0"
-        #          }
         payload = self._build_json_payload("actRegister", 
             [{"clientid":self.device_id, "nickname":self.nickname},
             [{"value":"no", "function":"WOL"}]])
@@ -251,6 +249,7 @@ class Bravia(object):
         r = self.do_POST(url='/sony/accessControl', payload=payload, auth=self.auth)
         if r.status_code == 200:
             print("have paired")
+            self.paired = True
             # let's call connect again to get the cookies all set up properly
             a,b = self.connect()
             if b is True:
@@ -289,7 +288,7 @@ class Bravia(object):
         payload = self._build_json_payload("setPlayContent", [{"uri":uri}])
         r = self.do_POST(url="/sony/avContent", payload=payload)
         if r.status_code == 200:
-            if "error" in r.json(): #.keys():
+            if "error" in r.json():
                 # Something didnt work.  The JSON will tell you what.
                 return False
             else:
@@ -344,7 +343,6 @@ class Bravia(object):
         body +=     '</s:Body>'
         body +=   '</s:Envelope>'
         r = self.do_POST(url=url, payload=body, headers=header)
-        print self._debug_request(r)
         if r.status_code == 200:
             return True
         else:
@@ -395,8 +393,6 @@ class Bravia(object):
         r = self.do_POST(url="/sony/avContent", payload=payload)
         chan_count = int(r.json()['result'][0]['count'])
         # It seems to only return the channels in lumps of 50, and some of those returned are blank?
-        # Problem:  It says there are like 800 channels, but some of those are "bad" and overwrite the "good" ones.  Need to be more picky
-        # about which ones to add to the list.
         chunk_size = 50
         loops = int(chan_count / chunk_size) + (chan_count % chunk_size > 0) # Sneaky round up trick, the mod > 0 evaluates to int 1
         chunk = 0
@@ -430,7 +426,7 @@ class Bravia(object):
         # be stupid.  So you just say "BBC ONE" and the script does the work to
         # find the HD version for you.
         for each in self.dvbt_channels.iteritems():
-            hd_version = "%s HD" % each[0] # e.g. "BBC ONE" : "BBC ONE HD"
+            hd_version = "%s HD" % each[0] # e.g. "BBC ONE" -> "BBC ONE HD"
             if hd_version in self.dvbt_channels:
                 # Extend the schema by adding a "hd_uri" key
                 self.dvbt_channels[each[0]]['hd_uri'] = self.dvbt_channels[hd_version]['uri']
@@ -439,25 +435,51 @@ class Bravia(object):
         if self.dvbt_channels == {}: self.get_channel_list()
         return self.dvbt_channels[title]['uri']
 
-    def wakeonlan(self):
+    def wakeonlan(self, mac=None):
         # Thanks: Taken from https://github.com/aparraga/braviarc/blob/master/braviarc/braviarc.py
         # Not using another library for this as it's pretty small...
-        if self.mac_addr is not None:
-            addr_byte = self.mac_addr.split(':')
-            hw_addr = struct.pack('BBBBBB', int(addr_byte[0], 16),
-                                  int(addr_byte[1], 16),
-                                  int(addr_byte[2], 16),
-                                  int(addr_byte[3], 16),
-                                  int(addr_byte[4], 16),
-                                  int(addr_byte[5], 16))
-            msg = b'\xff' * 6 + hw_addr * 16
-            socket_instance = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            socket_instance.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-            socket_instance.sendto(msg, ('<broadcast>', 9))
-            socket_instance.close()
-            return True
-        else:
+        if mac is None and self.mac_addr is not None:
+            mac = self.mac_addr
+        addr_byte = mac.split(':')
+        hw_addr = struct.pack('BBBBBB', int(addr_byte[0], 16),
+                              int(addr_byte[1], 16),
+                              int(addr_byte[2], 16),
+                              int(addr_byte[3], 16),
+                              int(addr_byte[4], 16),
+                              int(addr_byte[5], 16))
+        msg = b'\xff' * 6 + hw_addr * 16
+        socket_instance = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        socket_instance.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+        socket_instance.sendto(msg, ('<broadcast>', 9))
+        socket_instance.close()
+        return True
+        
+    def poweron(self):
+        # Convenience function to switch the TV on and block until it's ready
+        # to accept commands.
+        if self.paired is False:
+            print "You can only call this function once paired with the TV"
             return False
+        elif self.paired is True:
+            ready = False
+            if self.is_available() is True:
+                # If we're already on, return now.
+                return True
+            self.wakeonlan()
+            for x in range(10):
+                if self.is_available() is True:
+                    print "TV now available"
+                    return True
+                else:
+                    print "Didn't get a response. Trying again in 10 seconds. (Attempt %s of 10)" % x+1
+                    time.sleep(10)
+            if ready is False:
+                print "Couldnt connect in a timely manner. Giving up"
+                return False
+            else:
+                return True
 
-
+    def get_client_ip(self):
+        host_ip = [(s.connect(('8.8.8.8', 80)), s.getsockname()[0], s.close()) for s in [socket.socket(socket.AF_INET, socket.SOCK_DGRAM)]][0][1]
+        return host_ip
 

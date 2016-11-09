@@ -56,7 +56,7 @@ if b is True:
   #tv.get_system_info()
   #print tv.system_info
   #tv.get_dmr()
-  tv.do_remote_control("power off")
+  #tv.do_remote_control("power off")
   #tv.populate_apps_lookup()
   #print tv.get_app_status()
   #tv.load_app("BBC iPlayer")
@@ -66,11 +66,12 @@ if b is True:
   #tv.set_external_input(tv.get_input_uri_from_label('Chromecast')) # You need to have labled your inputs for this to work
   #print "\n\n\n"
   tv.create_HD_chan_lookups()
-  print json.dumps(tv.dvbt_channels, sort_keys=True, indent=4)
+  #print json.dumps(tv.dvbt_channels, sort_keys=True, indent=4)
   #chan  = tv.get_channel_uri('BBC ONE HD')
   #print chan
   #tv.set_external_input(chan)
   #print tv.dvbt_channels.keys()
+  print json.dumps(tv.remote_controller_code_lookup, sort_keys=True, indent=4)
 
   
 
