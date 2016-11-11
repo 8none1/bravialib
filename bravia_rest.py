@@ -181,6 +181,7 @@ class BraviaHandler(BaseHTTPRequestHandler):
 
     def POST_loadapp(self, appname):
         tv.poweron()
+        appname = urllib.unquote(appname).decode('utf8')        
         a = tv.load_app(appname)
         if a is True:
             return(200, {"status":True})
@@ -190,12 +191,16 @@ class BraviaHandler(BaseHTTPRequestHandler):
     def POST_channel(self, channame):
         tv.poweron()
         channame = urllib.unquote(channame).decode('utf8')
-        data = tv.dvbt_channels[channame]
+        try:
+            data = tv.dvbt_channels[channame]
+        except KeyError:
+            # Channel does not exist in our list
+            print "Channel '"+channame+"' not found in list."
+            return(500, {'status':False})
         if 'hd_uri' in data: uri = data['hd_uri']
         else: uri = data['uri']
         print "Channel URI is: " + uri
-        #a = tv.set_external_input(uri)
-        a = True
+        a = tv.set_external_input(uri)
         if a is True: return(200, {"status":True})
         else: return(500, {"status":False})
 
@@ -203,10 +208,21 @@ class BraviaHandler(BaseHTTPRequestHandler):
         inputname = urllib.unquote(inputname).decode('utf8')        
         tv.poweron()
         uri = tv.get_input_uri_from_label(inputname)
-        #a = tv.set_external_input(uri)
-        a = True
+        if uri is not None:
+            print "URI is: " + uri
+            a = tv.set_external_input(uri)
+        else:
+            a = False
         if a is True: return(200, {"status":True})
         else: return(500, {"status":False})
+
+    def POST_wakeonlan(self, mac):
+        mac = urllib.unquote(mac).decode('utf8')
+        a = tv.wakeonlan(mac)
+        if a is True:
+            return(200,{"status":True})
+        else:
+            return(500, {"status":False})
 
 
     def start_pairing(self):

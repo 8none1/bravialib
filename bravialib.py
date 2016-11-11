@@ -285,6 +285,8 @@ class Bravia(object):
         for each in self.input_map:
             if self.input_map[each]['label'] == label:
                 return self.input_map[each]['uri']
+        print "Didnt match the input name."
+        return None
 
     def set_external_input(self, uri):
         payload = self._build_json_payload("setPlayContent", [{"uri":uri}])
@@ -379,7 +381,10 @@ class Bravia(object):
         # Pass in the name of the app, the most useful ones on my telly are:
         # "Amazon Instant Video" , "Netflix", "BBC iPlayer", "Demand 5"
         if self.app_lookup == {}: self.populate_apps_lookup() # This must happen before apps will launch
-        app_id = self.app_lookup[app_name]['id']
+        try:
+            app_id = self.app_lookup[app_name]['id']
+        except KeyError:
+            return False
         print "Trying to load app:", app_id
         headers = {'Connection':'close'}
         r = self.do_POST(url="/DIAL/apps/"+app_id, headers=headers,
@@ -442,13 +447,17 @@ class Bravia(object):
         
     def get_channel_uri(self, title):
         if self.dvbt_channels == {}: self.get_channel_list()
-        return self.dvbt_channels[title]['uri']
+        try:
+            return self.dvbt_channels[title]['uri']
+        except KeyError:
+            return False
 
     def wakeonlan(self, mac=None):
         # Thanks: Taken from https://github.com/aparraga/braviarc/blob/master/braviarc/braviarc.py
         # Not using another library for this as it's pretty small...
         if mac is None and self.mac_addr is not None:
             mac = self.mac_addr
+        print "Waking MAC: " + mac
         addr_byte = mac.split(':')
         hw_addr = struct.pack('BBBBBB', int(addr_byte[0], 16),
                               int(addr_byte[1], 16),
