@@ -3,7 +3,7 @@ the tv
 
 
 #Intent Schema
-`{"intents": [
+```{"intents": [
     {"intent": "AMAZON.HelpIntent"},
     {"intent": "AMAZON.CancelIntent"},
     {"intent": "AMAZON.StopIntent"},
@@ -24,7 +24,7 @@ the tv
         "slots": [{"name":"Channels", "type":"Channels"}]},
     {"intent" : "SetInputIntent", 
         "slots" : [{"name":"Inputs", "type":"Inputs"}]}  
-]}`
+]}```
 
 
 #Custom Slots
@@ -146,59 +146,59 @@ the tv
     On
     Off
 
-#Sample Utterances
-`PowerIntent to switch {PowerStates}
-PowerIntent to power {PowerStates}
-PowerIntent to turn {PowerStates}
-PowerIntent {PowerStates}
+    #Sample Utterances
+    PowerIntent to switch {PowerStates}
+    PowerIntent to power {PowerStates}
+    PowerIntent to turn {PowerStates}
+    PowerIntent {PowerStates}
 
-MuteIntent mute
-MuteIntent to mute
+    MuteIntent mute
+    MuteIntent to mute
 
-VolumeUpIntent turn the volume up
-VolumeUpIntent volume up
-VolumeUpIntent volume up {VolNum}
-VolumeUpIntent turn up the volume
-VolumeUpIntent turn the volume up {VolNum}
-VolumeUpIntent turn the volume up by {VolNum}
+    VolumeUpIntent turn the volume up
+    VolumeUpIntent volume up
+    VolumeUpIntent volume up {VolNum}
+    VolumeUpIntent turn up the volume
+    VolumeUpIntent turn the volume up {VolNum}
+    VolumeUpIntent turn the volume up by {VolNum}
 
-VolumeDownIntent turn the volume down
-VolumeDownIntent turn down the volume
-VolumeDownIntent turn the volume down {VolNum}
-VolumeDownIntent turn the volume down by {VolNum}
-VolumeDownIntent volume down
-VolumeDownIntent volume down {VolNum}
+    VolumeDownIntent turn the volume down
+    VolumeDownIntent turn down the volume
+    VolumeDownIntent turn the volume down {VolNum}
+    VolumeDownIntent turn the volume down by {VolNum}
+    VolumeDownIntent volume down
+    VolumeDownIntent volume down {VolNum}
 
-PlayIntent play
-PlayIntent to play
-      
-PauseIntent pause
-PauseIntent to pause
-      
-StopIntent stop
-StopIntent to stop
-      
-ExitIntent exit
-ExitIntent to exit
-      
-LoadAppIntent load {Apps}
-LoadAppIntent to load {Apps}
-LoadAppIntent {Apps}
+    PlayIntent play
+    PlayIntent to play
+          
+    PauseIntent pause
+    PauseIntent to pause
+          
+    StopIntent stop
+    StopIntent to stop
+          
+    ExitIntent exit
+    ExitIntent to exit
+          
+    LoadAppIntent load {Apps}
+    LoadAppIntent to load {Apps}
+    LoadAppIntent {Apps}
 
-SetInputIntent switch input to {Inputs}
-SetInputIntent switch inputs to {Inputs}
-SetInputIntent switch to {Inputs}
-SetInputIntent change to {Inputs}
-SetInputIntent change input to {Inputs}
-SetInputIntent {Inputs}
+    SetInputIntent switch input to {Inputs}
+    SetInputIntent switch inputs to {Inputs}
+    SetInputIntent switch to {Inputs}
+    SetInputIntent change to {Inputs}
+    SetInputIntent change input to {Inputs}
+    SetInputIntent {Inputs}
 
-SetChannelIntent switch to {Channels}
-SetChannelIntent switch channel to {Channels}
-SetChannelIntent to switch to {Channels}
-SetChannelIntent to switch channel to {Channels}
-SetChannelIntent {Channels}
-SetChannelIntent to change to {Channels}
-SetChannelIntent change to {Channels}
-SetChannelIntent to put on {Channels}
-SetChannelIntent put on {Channels}`
+    SetChannelIntent switch to {Channels}
+    SetChannelIntent switch channel to {Channels}
+    SetChannelIntent to switch to {Channels}
+    SetChannelIntent to switch channel to {Channels}
+    SetChannelIntent {Channels}
+    SetChannelIntent to change to {Channels}
+    SetChannelIntent change to {Channels}
+    SetChannelIntent to put on {Channels}
+    SetChannelIntent put on {Channels}
 
