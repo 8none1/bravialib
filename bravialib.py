@@ -36,7 +36,9 @@ import struct
 import time
 
 
-
+class MockResponse(object):
+    def __init__(self, status_code):
+        self.status_code = status_code
 
 class Bravia(object):
     def __init__(self, ip_addr, mac_addr = None):
@@ -342,7 +344,11 @@ class Bravia(object):
         body +=        '</u:X_SendIRCC>'
         body +=     '</s:Body>'
         body +=   '</s:Envelope>'
-        r = self.do_POST(url=url, payload=body, headers=header)
+        try:
+            r = self.do_POST(url=url, payload=body, headers=header)
+        except ConnectTimeout:
+            print("Connect timeout error")
+            r = MockReponse(200)
         if r.status_code == 200:
             return True
         else:

@@ -10,6 +10,7 @@ from BaseHTTPServer import BaseHTTPRequestHandler,HTTPServer
 import json
 import time
 import sys
+import urllib
 
 
 PORT_NUMBER = 8090
@@ -66,17 +67,21 @@ class BraviaHandler(BaseHTTPRequestHandler):
                 """
                 self.send_reply(200, html.format(icon), "text/html")
             elif self.path == "/dumpinfo":
-                print tv.system_info
-                print "\n\n"
-                print tv.input_map
-                print "\n\n"
-                print tv.dmr_data
-                print "\n\n"
-                print tv.remote_controller_code_lookup
-                print "\n\n"
-                print tv.app_lookup
-                print "\n\n"
-                print tv.dvb_channels
+                html = "<html><head></head><body>"
+                html += "<pre>"
+                html += json.dumps(tv.system_info, sort_keys=True, indent=4)
+                html +="</pre><pre>"
+                html +=json.dumps(tv.input_map, sort_keys=True, indent=4)
+                html +="</pre><pre>"
+                html +=str(tv.dmr_data)
+                html +="</pre><pre>"
+                html +=json.dumps(tv.remote_controller_code_lookup, sort_keys=True, indent=4)
+                html +="</pre><pre>"
+                html +=json.dumps(tv.app_lookup, sort_keys=True, indent=4)
+                html +="</pre><pre>"
+                html +=json.dumps(tv.dvbt_channels, sort_keys=True, indent=4)
+                html += "</pre></body></html>"
+                self.send_reply(200,html, "text/html")
                 
             else:
                 html = """
@@ -141,30 +146,38 @@ class BraviaHandler(BaseHTTPRequestHandler):
             if a is True:
                 return(200, {"status":True})
             else:
-                return(200, {"status":False})
+                return(500, {"status":False})
         if action == "off":
             a = tv.do_remote_control("poweroff")
             if a is True:
                 return(200,{"status":True})
             else:
-                return(200, {"status":False})
+                return(500, {"status":False})
                 
     def POST_send(self, key):
         a = tv.do_remote_control(key)
         if a is True:
             return(200, {"status":True})
         else:
-            return(200, {"status":False})
+            return(500, {"status":False})
 
     def POST_volumeup(self, count):
+        count = int(count)
         for a in range(count):
-            tv.do_remote_control("volumeup")
-        return(200, {"status":True})
+            r = tv.do_remote_control("volumeup")
+        if r is True:
+            return(200, {"status":True})
+        else:
+            return(500, {"status":False})
 
     def POST_volumedown(self, count):
+        count = int(count)
         for a in range(count):
-            tv.do_remote_control("volumedown")
-        return(200, {"status":True})
+            r = tv.do_remote_control("volumedown")
+        if r is True:
+            return(200, {"status":True})
+        else:
+            return(500, {"status":False})
 
     def POST_loadapp(self, appname):
         tv.poweron()
@@ -172,23 +185,28 @@ class BraviaHandler(BaseHTTPRequestHandler):
         if a is True:
             return(200, {"status":True})
         else:
-            return(200, {"status":False})
+            return(500, {"status":False})
 
-    def POST_setchannel(self, channame):
+    def POST_channel(self, channame):
         tv.poweron()
-        data = tv.dvbt_channels['channame']
+        channame = urllib.unquote(channame).decode('utf8')
+        data = tv.dvbt_channels[channame]
         if 'hd_uri' in data: uri = data['hd_uri']
         else: uri = data['uri']
-        a = tv.set_external_input(uri)
+        print "Channel URI is: " + uri
+        #a = tv.set_external_input(uri)
+        a = True
         if a is True: return(200, {"status":True})
-        else: return(200, {"status":False})
+        else: return(500, {"status":False})
 
-    def POST_setinput(self, inputname):
+    def POST_input(self, inputname):
+        inputname = urllib.unquote(inputname).decode('utf8')        
         tv.poweron()
         uri = tv.get_input_uri_from_label(inputname)
-        a = tv.set_external_input(uri)
+        #a = tv.set_external_input(uri)
+        a = True
         if a is True: return(200, {"status":True})
-        else: return(200, {"status":False})
+        else: return(500, {"status":False})
 
 
     def start_pairing(self):
@@ -282,7 +300,8 @@ if __name__ == "__main__":
             print "Sorry, I couldn't connect to the TV."
             print "Maybe it's not on, maybe the IP address is wrong, maybe it's an unsupported model."
             sys.exit(1)
-    else:
+            
+    if tv.is_available():
         # In theory the TV is powered on and responding to requests, but
         # we don't know if we are actually paired or not yet. This should
         # be good enough to start the HTTP server and the rest can be done
