@@ -346,8 +346,11 @@ class Bravia(object):
         body +=   '</s:Envelope>'
         try:
             r = self.do_POST(url=url, payload=body, headers=header)
-        except ConnectTimeout:
+        except requests.exceptions.ConnectTimeout:
             print("Connect timeout error")
+            r = MockReponse(200)
+        except requests.exceptions.ConnectionError:
+            print("Connect error")
             r = MockReponse(200)
         if r.status_code == 200:
             return True
