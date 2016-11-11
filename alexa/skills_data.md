@@ -3,7 +3,7 @@ the tv
 
 
 #Intent Schema
-{"intents": [
+`{"intents": [
     {"intent": "AMAZON.HelpIntent"},
     {"intent": "AMAZON.CancelIntent"},
     {"intent": "AMAZON.StopIntent"},
@@ -24,7 +24,7 @@ the tv
         "slots": [{"name":"Channels", "type":"Channels"}]},
     {"intent" : "SetInputIntent", 
         "slots" : [{"name":"Inputs", "type":"Inputs"}]}  
-]}
+]}`
 
 
 #Custom Slots
@@ -147,7 +147,7 @@ the tv
     Off
 
 #Sample Utterances
-PowerIntent to switch {PowerStates}
+`PowerIntent to switch {PowerStates}
 PowerIntent to power {PowerStates}
 PowerIntent to turn {PowerStates}
 PowerIntent {PowerStates}
@@ -200,6 +200,5 @@ SetChannelIntent {Channels}
 SetChannelIntent to change to {Channels}
 SetChannelIntent change to {Channels}
 SetChannelIntent to put on {Channels}
-SetChannelIntent put on {Channels}
-
+SetChannelIntent put on {Channels}`
 
