@@ -59,7 +59,7 @@ Now we can poke the TV through a simplified REST interface, it's much easier to 
 
 Here's how it works:
 
-!(https://path-to-image.png)
+![block diagram](https://raw.githubusercontent.com/8none1/bravialib/master/docs/Alexa%20Bravia%20Block%20Diagram.png "Alexa Block Diagram")
 
 1. You issue the command to Alexa: ```Alexa tell The TV to change to channel BBC ONE```.
 2. Your voice is sent to AWS (the green lines) decoded and the utterances and intents etc are sent to the Lambda script.
