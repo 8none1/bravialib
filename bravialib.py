@@ -350,10 +350,10 @@ class Bravia(object):
             r = self.do_POST(url=url, payload=body, headers=header)
         except requests.exceptions.ConnectTimeout:
             print("Connect timeout error")
-            r = MockReponse(200)
+            r = MockResponse(200)
         except requests.exceptions.ConnectionError:
             print("Connect error")
-            r = MockReponse(200)
+            r = MockResponse(200)
         if r.status_code == 200:
             return True
         else:
@@ -389,6 +389,9 @@ class Bravia(object):
         headers = {'Connection':'close'}
         r = self.do_POST(url="/DIAL/apps/"+app_id, headers=headers,
             cookies=self.DIAL_cookie)
+        print r.status_code
+        print r.headers
+        print r
         if r.status_code == 201:
             return True
         else:
