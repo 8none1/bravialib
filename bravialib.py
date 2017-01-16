@@ -492,7 +492,7 @@ class Bravia(object):
                     print "TV now available"
                     return True
                 else:
-                    print "Didn't get a response. Trying again in 10 seconds. (Attempt %s of 10)" % x+1
+                    print "Didn't get a response. Trying again in 10 seconds. (Attempt "+str(x+1)+" of 10)" 
                     time.sleep(10)
             if ready is False:
                 print "Couldnt connect in a timely manner. Giving up"
