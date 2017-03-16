@@ -50,6 +50,7 @@ class Bravia(object):
         self.nickname = "IoT Remote Controller Interface"
         self.endpoint = 'http://'+self.ip_addr
         self.cookies = None
+        self.x_auth_psk = None # If you're using PSK instead of cookies you need to set this.
         self.DIAL_cookie = {}
         self.packet_id = 1
         self.device_friendly_name = ""
@@ -129,6 +130,7 @@ class Bravia(object):
         if url is None: return False
         if url[0:4] != "http": url=self.endpoint+url
         if cookies is None and self.cookies is not None: cookies=self.cookies
+        if self.x_auth_psk is not None: headers['X-Auth-PSK']=self.x_auth_psk
         if timeout is None: timeout = self._TIMEOUT
         if headers is None:
             r = requests.get(url, cookies=cookies, auth=auth, timeout=timeout)
@@ -141,6 +143,7 @@ class Bravia(object):
         if type(payload) is dict: payload = json.dumps(payload)
         if headers is None: headers = self._JSON_HEADER # If you don't want any extra headers pass in ""
         if cookies is None and self.cookies is not None: cookies=self.cookies
+        if self.x_auth_psk is not None: headers['X-Auth-PSK']=self.x_auth_psk
         if timeout is None: timeout = self._TIMEOUT
         if url[0:4] != "http":  url = self.endpoint+url # if you want to pass just the path you can, otherwise pass a full url and it will be used
         self.packet_id += 1 # From packet captures, this increments on each request, so its a good idea to use this method all the time
@@ -148,6 +151,7 @@ class Bravia(object):
             r = requests.post(url, data=payload, headers=headers, cookies=cookies, auth=self.auth, timeout=timeout)
         else:
             r = requests.post(url, data=payload, headers=headers, cookies=cookies, timeout=timeout)
+        print r
         return r
 
     def connect(self):
@@ -165,68 +169,77 @@ class Bravia(object):
         #  5. Use the cookie in all subsequent requests.  Note there is an issue with this.  The cookie is for
         #     path "/sony/" *but* the Apps are run from a path "/DIAL/sony/" so I try and fix this by adding a
         #     second cookie with that path and the same auth data.
-        payload = self._build_json_payload("actRegister",
-            [{"clientid":self.device_id,"nickname":self.nickname},
-            [{"value":"no","function":"WOL"},
-            {"value":"no","function":"pinRegistration"}]])
-        try:
-            r = self.do_POST(url='/sony/accessControl', payload=payload)            
-        except requests.exceptions.ConnectTimeout:
-            print "No response, TV is probably off"
-            return None, False
-        except requests.exceptions.ConnectionError:
-            print "TV is certainly off."
-            return None, False
-
-        if r.status_code == 200:
-            # Rather handily, the TV returns a 200 if the TV is in stand-by but not really on :)
+        if self.x_auth_psk is None: # We have not specified a PSK therefore we have to use Cookies
+            payload = self._build_json_payload("actRegister",
+                [{"clientid":self.device_id,"nickname":self.nickname},
+                [{"value":"no","function":"WOL"},
+                {"value":"no","function":"pinRegistration"}]])
             try:
-                if "error" in r.json(): #.keys():
-                    if "not power-on" in r.json()['error']:
-                        # TV isn't powered up
-                        r = self.wakeonlan()
-                        print "TV not on! Have sent wakeonlan, probably try again in a mo."
-                        # TODO: make this less crap
-                        return None,False
-            except:
-                raise
-            
-            # If we get here then We are already paired so get the new token
+                r = self.do_POST(url='/sony/accessControl', payload=payload)            
+            except requests.exceptions.ConnectTimeout:
+                print "No response, TV is probably off"
+                return None, False
+            except requests.exceptions.ConnectionError:
+                print "TV is certainly off."
+                return None, False
+
+            if r.status_code == 200:
+                # Rather handily, the TV returns a 200 if the TV is in stand-by but not really on :)
+                try:
+                    if "error" in r.json(): #.keys():
+                        if "not power-on" in r.json()['error']:
+                            # TV isn't powered up
+                            r = self.wakeonlan()
+                            print "TV not on! Have sent wakeonlan, probably try again in a mo."
+                            # TODO: make this less crap
+                            return None,False
+                except:
+                    raise
+                
+                # If we get here then We are already paired so get the new token
+                self.paired = True
+                self.cookies = r.cookies
+                # Also add the /DIAL/ path cookie
+                # Looks like requests doesn't handle two cookies with the same name ('auth') in one jar
+                # so going to have a dict for the DIAL cookie and pass around as needed. :/
+                a = r.headers['Set-Cookie'].split(';') # copy the cookie data headers
+                for each in a:
+                  if len(each) > 0:
+                    b = each.split('=')
+                    self.DIAL_cookie[b[0].strip()] = b[1]
+            elif r.status_code == 401:
+                print "We are not paired!"
+                return r,False
+            elif r.status_code == 404:
+                # Most likely the TV hasn't booted yet
+                print("TV probably hasn't booted yet")
+                return r,False
+            else: return None,False
+                
+        else: # We are using a PSK
             self.paired = True
-            self.cookies = r.cookies
-            # Also add the /DIAL/ path cookie
-            # Looks like requests doesn't handle two cookies with the same name ('auth') in one jar
-            # so going to have a dict for the DIAL cookie and pass around as needed. :/
-            a = r.headers['Set-Cookie'].split(';') # copy the cookie data headers
-            for each in a:
-              if len(each) > 0:
-                b = each.split('=')
-                self.DIAL_cookie[b[0].strip()] = b[1]
-            # Populate some data now automatically.
-            print "Getting DMR info..."
-            self.get_dmr()
-            print "Getting sysem info..."
-            self.get_system_info()
-            print "Populating remote control codes..."
-            self.populate_controller_lookup()
-            print "Enumerating TV inputs..."
-            self.get_input_map()
-            print "Populating apps list..."
-            self.populate_apps_lookup()
-            print "Populating channel list..."
-            self.get_channel_list()
-            print "Matching HD channels..."
-            self.create_HD_chan_lookups() # You might not want to do this if you don't use Freeview in the UK
-            print "Done initialising TV data."
-            return r,True
-        elif r.status_code == 401:
-            print "We are not paired!"
-            return r,False
-        elif r.status_code == 404:
-            # Most likely the TV hasn't booted yet
-            print("TV probably hasn't booted yet")
-            return r,False
-        else: return None,False
+            self.cookies = None
+            self.DIAL_cookie = None
+            r = None
+
+        # Populate some data now automatically.
+        print "Getting DMR info..."
+        self.get_dmr()
+        print "Getting sysem info..."
+        self.get_system_info()
+        print "Populating remote control codes..."
+        self.populate_controller_lookup()
+        print "Enumerating TV inputs..."
+        self.get_input_map()
+        print "Populating apps list..."
+        self.populate_apps_lookup()
+        print "Populating channel list..."
+        self.get_channel_list()
+        print "Matching HD channels..."
+        self.create_HD_chan_lookups() # You might not want to do this if you don't use Freeview in the UK
+        print "Done initialising TV data."
+        return r,True
+
             
     def start_pair(self):
         # This should prompt the TV to display the pairing screen
