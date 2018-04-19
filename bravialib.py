@@ -18,7 +18,7 @@
 # Thanks:
 #   https://github.com/aparraga/braviarc/
 #   https://docs.google.com/viewer?a=v&pid=sites&srcid=ZGlhbC1tdWx0aXNjcmVlbi5vcmd8ZGlhbHxneDoyNzlmNzY3YWJlMmY1MjZl
-#   
+#
 # Some useful resources:
 #   A tidied up packet capture I did from the iphone app:  http://paste.ubuntu.com/23417464/plain/
 #
@@ -41,11 +41,14 @@ class MockResponse(object):
         self.status_code = status_code
 
 class Bravia(object):
-    def __init__(self, ip_addr, mac_addr = None):
+    def __init__(self, hostname = None, ip_addr = None, mac_addr = None):
         self.ip_addr = ip_addr
+        self.hostname = hostname
         self.mac_addr = mac_addr # You don't *have* to specify the MAC address as once we are paired via IP we can find 
         # it from the TV but it will only be stored for this session.  If the TV is off and you are running this script
         # from cold - you will need the MAC to wake the TV up.
+        if self.ip_addr is None and self.hostname is not None:
+            self.ip_addr = self._lookup_ip_from_hostname(self.hostname)
         self.device_id = "WebInterface:001"
         self.nickname = "IoT Remote Controller Interface"
         self.endpoint = 'http://'+self.ip_addr
@@ -73,13 +76,20 @@ class Bravia(object):
         print r.headers
         print r.text
         print "-----------------------------------"
-        print "\n\n\n"        
-        
-        
+        print "\n\n\n"
+
+    def _lookup_ip_from_hostname(self, hostname):
+        ipaddr = socket.getbyhostname(hostname)
+        if ipaddr is not '127.0.0.1':
+            return ipaddr
+        else:
+            # IP lookup failed
+            return False
+
     def _build_json_payload(self,method, params = [], version="1.0"):
         return {"id":self.packet_id, "method":method, "params":params,
                 "version":version}
-            
+
     def is_available(self):
         # Try to find out if the TV is actually on or not.  Pinging the TV would require
         # this script to run as root, so not doing that.  This function return True or
