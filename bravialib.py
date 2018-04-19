@@ -79,7 +79,7 @@ class Bravia(object):
         print "\n\n\n"
 
     def _lookup_ip_from_hostname(self, hostname):
-        ipaddr = socket.getbyhostname(hostname)
+        ipaddr = socket.gethostbyname(hostname)
         if ipaddr is not '127.0.0.1':
             return ipaddr
         else:
