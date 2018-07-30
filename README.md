@@ -3,6 +3,9 @@ A Python library for talking to some Sony Bravia TVs, and an accompanying Alexa 
 
 These scripts make use of the excellent Requests module.  You'll need to install that first.
 
+## Current Development Status = dead
+The TV that I had was broken by the kids.  I bought what I thought was the equivilent 4k model (the XE70 series) when it was on offer at Amazon.  The XE70 does not support any remote control API.  In fact, the XE70 is a bit of a dissapointment all round.  The picture quality is good, but everything else about the TV is worse than the W605 that I had before.  Anyway, since I don't have a TV to use this against any more, I'm not able to do anything work on this library.  
+
 ## bravialib itself
 This is a fairly simple library which allows you to "pair" the script with the TV and will then send cookie-authenticated requests to the TVs own web API to control pretty much everything.  You can:
 
